@@ -3,6 +3,8 @@ package jopj;
 /**
  * Java translation/skeleton of OpenJPEG's cio.c / cio.h.
  *
+ *
+ *
  * Provides:
  *  - Endian helpers for ints/floats/doubles
  *  - Stream struct (OpjStreamPrivate)
