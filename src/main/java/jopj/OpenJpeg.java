@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static jopj.OpenJpeg.OpjCodecFormat.OPJ_CODEC_J2K;
+
 /**
  * Java skeleton for the OpenJPEG public API.
  *
@@ -16,8 +18,12 @@ import java.nio.file.Path;
  * ByteArraySource, so you can operate on in-memory JP2K codestreams.
  */
 public final class OpenJpeg {
-
-    private OpenJpeg() {
+    /**
+     * throw new UnsupportedOperationException(
+     *             "opj_j2k_exec not implemented yet");
+     */
+    public OpenJpeg(OpjDecompress opjDecompress) {
+        this.opjDecompress = opjDecompress;
     }
 
     /* ------------------------------------------------------------------ */
@@ -26,6 +32,8 @@ public final class OpenJpeg {
 
     public static final int OPJ_TRUE  = 1;
     public static final int OPJ_FALSE = 0;
+
+    public OpjDecompress opjDecompress;
 
     /* ------------------------------------------------------------------ */
     /* Codec format enum                                                  */
@@ -56,10 +64,6 @@ public final class OpenJpeg {
     /* Opaque handles and image/index shells                              */
     /* ------------------------------------------------------------------ */
 
-    public static final class OpjCodec {
-        // In JNI scenario, hold native pointer here.
-    }
-
     public static final class OpjCStrIndex {
         // TODO: codestream index fields if needed.
     }
@@ -86,10 +90,15 @@ public final class OpenJpeg {
     /* ------------------------------------------------------------------ */
 
     public static OpjCodec opj_create_decompress(OpjCodecFormat format) {
-        // For now this is just a shell; later you can hang jopj.J2K/T2/TCD state here
-        OpjCodec codec = new OpjCodec();
-        // e.g. codec.j2k = new jopj.J2K.OpjJ2k();
-        return codec;
+        switch (format)
+        {
+            case OPJ_CODEC_J2K:
+                return new OpjJ2k();
+            case OPJ_CODEC_JP2:
+                return new OpjJP2();
+
+        }
+        return null;
     }
 
     public static void opj_destroy_codec(OpjCodec codec) {
@@ -110,7 +119,6 @@ public final class OpenJpeg {
     public static boolean opj_read_header(OpjStream stream,
                                           OpjCodec codec,
                                           OpjImage image) {
-        // TODO: implement real header parsing.
         return true;
     }
 
@@ -180,73 +188,6 @@ public final class OpenJpeg {
     /* Stream helpers wired to ByteArraySource + jopj.Cio                       */
     /* ------------------------------------------------------------------ */
 
-    /**
-     * Java replacement for:
-     *   opj_stream_t* opj_stream_create_default_file_stream(const char* fname, OPJ_BOOL p_is_read_stream);
-     *
-     * This implementation:
-     *   - reads the whole file into memory (byte[])
-     *   - wraps it in ByteArraySource
-     *   - creates a jopj.Cio-backed jopj.OpjStream with read/skip/seek callbacks
-     */
-    public static OpjStream opj_stream_create_default_file_stream(String filename,
-                                                                  boolean isReadStream) {
-        if (!isReadStream) {
-            // You can extend this to support write streams later.
-            return null;
-        }
-
-        byte[] data;
-        try {
-            data = Files.readAllBytes(Path.of(filename));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-
-        OpjStream.ByteArraySource src = new OpjStream.ByteArraySource(data);
-
-        // Create stream as input
-        Cio.OpjStreamPrivate base = Cio.opj_stream_default_create(true);
-        // Wrap as jopj.OpjStream alias
-        OpjStream stream = new OpjStream();
-        // Copy base fields into our subclass instance
-        stream.storedData       = base.storedData;
-        stream.bufferSize       = base.bufferSize;
-        stream.bytesInBuffer    = base.bytesInBuffer;
-        stream.currentDataOffset= base.currentDataOffset;
-        stream.byteOffset       = base.byteOffset;
-        stream.status           = base.status;
-        stream.opjSkip          = base.opjSkip;
-        stream.opjSeek          = base.opjSeek;
-
-        // Attach user data and length
-        Cio.opj_stream_set_user_data(stream, src, userData -> {
-            // nothing to free; GC handles byte[]
-        });
-        Cio.opj_stream_set_user_data_length(stream, src.length());
-
-        // Set callbacks
-        Cio.opj_stream_set_read_function(stream, (buffer, nbBytes, userData) -> {
-            OpjStream.ByteArraySource s = (OpjStream.ByteArraySource) userData;
-            return s.read(buffer, nbBytes);
-        });
-
-        Cio.opj_stream_set_skip_function(stream, (nbBytes, userData) -> {
-            OpjStream.ByteArraySource s = (OpjStream.ByteArraySource) userData;
-            return s.skip(nbBytes);
-        });
-
-        Cio.opj_stream_set_seek_function(stream, (offset, userData) -> {
-            OpjStream.ByteArraySource s = (OpjStream.ByteArraySource) userData;
-            return s.seek(offset);
-        });
-
-        // For now, write is unused in read streams, so leave default or set a no-op:
-        Cio.opj_stream_set_write_function(stream, (buffer, nbBytes, userData) -> -1L);
-
-        return stream;
-    }
 
     public static void opj_stream_destroy(OpjStream stream) {
         if (stream == null) return;

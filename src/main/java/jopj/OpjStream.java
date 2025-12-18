@@ -86,7 +86,7 @@ public final class OpjStream extends Cio.OpjStreamPrivate {
     }
 
     /**
-     * Utility to create an jopj.OpjStream over a byte[] codestream.
+     * Utility to create a jopj.OpjStream over a byte[] code stream.
      */
     public static OpjStream createFromByteArray(byte[] data) {
         ByteArraySource src = new ByteArraySource(data);

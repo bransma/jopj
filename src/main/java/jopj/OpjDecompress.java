@@ -1,18 +1,47 @@
 package jopj;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.Objects;
 
 /**
  * Narrow-path JPEG 2000 decode API:
- *
  *   byte[] codestream -> DecodedImage (planar int samples).
- *
  * No CLI, no file I/O. This is what your DICOM pipeline should call.
  */
-public final class OpjDecompress {
+public abstract class OpjDecompress {
 
-    private OpjDecompress() {
+    public OpjDecompress() {
     }
+
+    public static void main(String[] args)
+    {
+
+         String path = args[0];
+         byte[] jp2k_data;
+
+         try
+         {
+             jp2k_data = readData(path);
+             DecodedImage img = OpjDecompress.decode(jp2k_data);
+             System.out.println(img);
+         }
+         catch (IOException ioe)
+         {
+             ioe.printStackTrace();
+             System.exit(-1);
+         }
+    }
+
+    public static byte[] readData(String fileName) throws IOException
+    {
+        RandomAccessFile in = new RandomAccessFile(fileName, "r");
+        byte[] rawData = new byte[(int) in.length()];
+        in.readFully(rawData);
+        in.close();
+        return rawData;
+    }
+
 
     public static final class DecodedImage {
         public int width;
@@ -25,35 +54,38 @@ public final class OpjDecompress {
     }
 
     public static DecodedImage decode(byte[] input) {
-        Objects.requireNonNull(input, "codestream must not be null");
+        Objects.requireNonNull(input, "code stream must not be null");
 
         Jp2Parser.J2kFormat format = Jp2Parser.sniffFormat(input);
-
-        byte[] codestream;
-        switch (format) {
-            case RAW_J2K:
-                codestream = input;
-                break;
-            case JP2:
-                codestream = Jp2Parser.extractCodestream(input);
-                break;
-            default:
-                throw new UnsupportedOperationException("Unsupported JPEG 2000 format");
-        }
-        OpjStream stream = null;
-        OpenJpeg.OpjCodec codec = null;
+        OpjStream stream;
+        OpjCodec codec;
         OpjImage image = null;
 
-        try {
-            // Wrap byte[] in an jopj.OpjStream
-            stream = OpjStream.createFromByteArray(codestream);
+        byte[] codestream;
+        switch (format)
+        {
+            case RAW_J2K ->
+            {
+                codestream = input;
+                // Wrap byte[] in a jopj.OpjStream
+                stream = OpjStream.createFromByteArray(codestream);
 
-            // Create codec for raw jopj.J2K (or JP2 if you prefer)
-            codec = OpenJpeg.opj_create_decompress(OpenJpeg.OpjCodecFormat.OPJ_CODEC_J2K);
-            if (codec == null) {
-                throw new RuntimeException("opj_create_decompress returned null");
+                // Create codec for raw jopj.J2K (or JP2 if you prefer)
+                codec = OpenJpeg.opj_create_decompress(OpenJpeg.OpjCodecFormat.OPJ_CODEC_J2K);
             }
+            case JP2 ->
+            {
+                codestream = Jp2Parser.extractCodestream(input);
+                // Wrap byte[] in a jopj.OpjStream
+                stream = OpjStream.createFromByteArray(codestream);
 
+                // Create codec for raw jopj.J2K (or JP2 if you prefer)
+                codec = OpenJpeg.opj_create_decompress(OpenJpeg.OpjCodecFormat.OPJ_CODEC_JP2);
+            }
+            default -> throw new UnsupportedOperationException("Unsupported JPEG 2000 format");
+        }
+
+        try {
             // Default decoder parameters
             OpenJpeg.OpjDParameters params = new OpenJpeg.OpjDParameters();
             OpenJpeg.opj_set_default_decoder_parameters(params);
@@ -81,13 +113,8 @@ public final class OpjDecompress {
             return toDecodedImage(image);
 
         } finally {
-            if (codec != null) {
-                OpenJpeg.opj_destroy_codec(codec);
-            }
-            if (stream != null) {
-                // You can either call jopj.Cio.opj_stream_destroy or a wrapper
-                Cio.opj_stream_destroy(stream);
-            }
+            OpenJpeg.opj_destroy_codec(codec);
+            Cio.opj_stream_destroy(stream);
             if (image != null) {
                 OpenJpeg.opj_image_destroy(image);
             }
